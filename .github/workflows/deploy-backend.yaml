@@ -10,12 +10,13 @@ jobs:
       # Checkout the code
       - name: Checkout code
         uses: actions/checkout@v3
-      
-    - name: Set short git commit SHA
-      id: commit
-      uses: prompt/actions-commit-hash@v2
 
-      #Set AWS credentials from GitHub secrets
+      # Set short git commit SHA
+      - name: Set short git commit SHA
+        id: commit
+        uses: prompt/actions-commit-hash@v2
+
+      # Set AWS credentials from GitHub secrets
       - name: Set AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
@@ -23,41 +24,41 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ vars.AWS_REGION }}
 
-      - name: Build docker image
-        uses: actions/checkout@v4
-
+      # Build the Docker image
       - name: Build the Docker image
         env:
           IMAGE_TAG: ${{ steps.commit.outputs.short }}
         run: |
-          docker build . --file Dockerfile --tag ${{ var.ECR_REPO }}:$VERSION
+          docker build . --file Dockerfile --tag ${{ vars.ECR_REPO }}:$IMAGE_TAG
           aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin 933780768159.dkr.ecr.ap-south-1.amazonaws.com
-          docker push ${{ var.ECR_REPO }}:$VERSION
-      
+          docker push ${{ vars.ECR_REPO }}:$IMAGE_TAG
+
+      # Login to Amazon ECR
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
 
+      # Update kube config
       - name: Update kube config
-        run: aws eks update-kubeconfig --name dev-cluster --region ${{vars.AWS_REGION}}
+        run: aws eks update-kubeconfig --name dev-cluster --region ${{ vars.AWS_REGION }}
 
-      - name: Setup creds
-        id: setting postgres creds
+      # Setup credentials
+      - name: Setup Postgres creds
+        id: setting-postgres-creds
         env:
-          IMAGE_TAG: ${{ steps.commit.outputs.short }
+          IMAGE_TAG: ${{ steps.commit.outputs.short }}
         run: |
-          mkdir config
-          cp  ./example-config/config.json config/config.json
-          sed  "s/<db_password>/$(kubectl get secret --namespace postgres postgres-passwords -o jsonpath="{.data.password}" | base64 --decode)/g" ./example-config/config.json > config/config.json
-          sed -i -e "s/<version>/$VERSION/g" K8s-deployments/Deployment.yaml
-          
+          mkdir -p config
+          cp ./example-config/config.json config/config.json
+          sed "s/<db_password>/$(kubectl get secret --namespace postgres postgres-passwords -o jsonpath='{.data.password}' | base64 --decode)/g" ./example-config/config.json > config/config.json
+          sed -i -e "s/<version>/$IMAGE_TAG/g" K8s-deployments/Deployment.yaml
+
+      # Deploy the application
       - name: Deploying application
-        run: | 
+        run: |
           kubectl create secret generic backend-config-secret \
-          --from-file=config.json=config/config.json \
-          -n backend
+            --from-file=config.json=config/config.json \
+            -n backend
           kubectl apply -f K8s-deployments/Deployment.yaml
           kubectl apply -f K8s-deployments/Service.yaml
           kubectl apply -f K8s-deployments/hpa.yaml
-
-        
