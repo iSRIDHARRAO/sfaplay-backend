@@ -56,6 +56,9 @@ jobs:
       # Deploy the application
       - name: Deploying application
         run: |
+          if kubectl get secret backend-config-secret -n backend; then
+            kubectl delete secret backend-config-secret -n backend
+          fi
           kubectl create secret generic backend-config-secret \
             --from-file=config.json=config/config.json \
             -n backend
