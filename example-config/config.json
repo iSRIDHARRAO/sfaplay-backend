@@ -1,9 +1,9 @@
 {
   "development": {
-    "username": "<db_username>",
+    "username": "postgres",
     "password": "<db_password>",
-    "database": "<db>",
-    "host": "<db_host>",
+    "database": "postgres",
+    "host": "postgres-postgresql.postgres.svc.cluster.local",
     "dialect": "postgres",
     "port" : 5432,
     "appPort" : 5000

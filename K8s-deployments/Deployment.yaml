@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: backend
+  name: backend-deployment
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: myapp
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app: myapp
+    spec:
+      containers:
+      - name: backend
+        image: 933780768159.dkr.ecr.ap-south-1.amazonaws.com/backend:<version>
+        resources:
+          requests:
+            cpu: 1m
+            memory: 100Mi
+        ports:
+        - containerPort: 5000
+        volumeMounts:
+        - name: config-volume
+          mountPath: /app/config/config.json
+          subPath: config.json
+      volumes:
+      - name: config-volume
+        secret:
+          secretName: backend-config-secret

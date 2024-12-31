@@ -1,0 +1,63 @@
+name: Deploy backend to EKS
+on:
+  push: 
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      # Checkout the code
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+    - name: Set short git commit SHA
+      id: commit
+      uses: prompt/actions-commit-hash@v2
+
+      #Set AWS credentials from GitHub secrets
+      - name: Set AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Build docker image
+        uses: actions/checkout@v4
+
+      - name: Build the Docker image
+        env:
+          IMAGE_TAG: ${{ steps.commit.outputs.short }}
+        run: |
+          docker build . --file Dockerfile --tag ${{ var.ECR_REPO }}:$VERSION
+          aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin 933780768159.dkr.ecr.ap-south-1.amazonaws.com
+          docker push ${{ var.ECR_REPO }}:$VERSION
+      
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Update kube config
+        run: aws eks update-kubeconfig --name dev-cluster --region ${{vars.AWS_REGION}}
+
+      - name: Setup creds
+        id: setting postgres creds
+        env:
+          IMAGE_TAG: ${{ steps.commit.outputs.short }
+        run: |
+          mkdir config
+          cp  ./example-config/config.json config/config.json
+          sed  "s/<db_password>/$(kubectl get secret --namespace postgres postgres-passwords -o jsonpath="{.data.password}" | base64 --decode)/g" ./example-config/config.json > config/config.json
+          sed -i -e "s/<version>/$VERSION/g" K8s-deployments/Deployment.yaml
+          
+      - name: Deploying application
+        run: | 
+          kubectl create secret generic backend-config-secret \
+          --from-file=config.json=config/config.json \
+          -n backend
+          kubectl apply -f K8s-deployments/Deployment.yaml
+          kubectl apply -f K8s-deployments/Service.yaml
+          kubectl apply -f K8s-deployments/hpa.yaml
+
+        
